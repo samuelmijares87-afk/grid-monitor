@@ -282,8 +282,8 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 </div>
 
 <script>
-const TG_TOKEN  = '8363672729:AAG6ERlN7qevBQuNK4I8J15ZJCYjVk2R5uo';
-const TG_CHATID = '5957950990';
+const TG_TOKEN   = '8363672729:AAG6ERlN7qevBQuNK4I8J15ZJCYjVk2R5uo';
+const TG_CHATIDS = ['5957950990', '7452674665']; // Tú + Rafael
 
 const ASSETS = {
   BTC: { symbol:'BTCUSDT', low:72000,  high:80000,  decimals:0,
@@ -296,8 +296,10 @@ const ASSETS = {
 
 const prevPrices   = {BTC:null,ETH:null,BNB:null};
 const alertSent    = {BTC:false,ETH:false,BNB:false};
-const lastSignal   = {BTC:'',ETH:'',BNB:''};
-let autoRefresh    = false;
+const lastSignal    = {BTC:'',ETH:'',BNB:''};
+const lastAlertTime = {BTC:0,ETH:0,BNB:0};
+const ALERT_COOLDOWN = 60*60*1000;
+let autoRefresh     = false;
 let autoTimer      = null;
 let countdown      = 60;
 
@@ -330,25 +332,30 @@ function fmt(n,dec){
 
 // ── TELEGRAM ──────────────────────────────────────────────
 async function sendTelegram(msg){
-  try{
-    const url=`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`;
-    const res=await fetch(url,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({chat_id:TG_CHATID,text:msg,parse_mode:'HTML'})
-    });
-    const data=await res.json();
-    if(data.ok){
-      logTG('✓ Mensaje enviado a Telegram','sent');
-      return true;
-    } else {
-      logTG('✗ Error Telegram: '+data.description,'err');
-      return false;
+  const url=`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`;
+  const nombres={5957950990:'Tú',7452674665:'Rafael'};
+  let allOk=true;
+  for(const chatId of TG_CHATIDS){
+    try{
+      const res=await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({chat_id:chatId,text:msg,parse_mode:'HTML'})
+      });
+      const data=await res.json();
+      const nombre=nombres[chatId]||chatId;
+      if(data.ok){
+        logTG('✓ Enviado a '+nombre,'sent');
+      } else {
+        logTG('✗ Error ('+nombre+'): '+data.description,'err');
+        allOk=false;
+      }
+    }catch(e){
+      logTG('✗ Conexión fallida ('+nombre+')','err');
+      allOk=false;
     }
-  }catch(e){
-    logTG('✗ Error de conexión Telegram','err');
-    return false;
   }
+  return allOk;
 }
 
 function buildTelegramMsg(key,d,okCount){
@@ -529,16 +536,26 @@ function updatePanel(key,d){
     alertEl.innerHTML=`<span class="alert-icon">⏸</span><span>${okCount}/5 condiciones OK. No activar todavía.</span>`;
   }
 
-  // Enviar Telegram solo cuando cambia la señal a ready o caution
+  // Enviar Telegram: solo cuando cambia señal Y pasó al menos 1 hora
   const signalChanged = newSignal !== lastSignal[key];
   lastSignal[key] = newSignal;
+  const ahora = Date.now();
+  const tiempoDesdeUltima = ahora - lastAlertTime[key];
+  const puedeEnviar = tiempoDesdeUltima >= ALERT_COOLDOWN;
 
-  if(signalChanged && (newSignal==='ready' || newSignal==='caution')){
-    const msg=buildTelegramMsg(key,{...d,bbPos:d.bbPos},okCount);
-    if(msg){
-      sendTelegram(msg).then(ok=>{
-        if(ok) logTG(`📱 Alerta ${key} enviada (${newSignal})`,'sent');
-      });
+  if((newSignal==='ready' || newSignal==='caution') && (signalChanged || puedeEnviar)){
+    if(puedeEnviar){
+      const msg=buildTelegramMsg(key,{...d,bbPos:d.bbPos},okCount);
+      if(msg){
+        lastAlertTime[key] = ahora;
+        const minRestantes = 60;
+        sendTelegram(msg).then(ok=>{
+          if(ok) logTG(`📱 Alerta ${key} enviada — próxima en 60min`,'sent');
+        });
+      }
+    } else {
+      const minRestantes = Math.ceil((ALERT_COOLDOWN - tiempoDesdeUltima) / 60000);
+      logTG(`⏱ ${key}: próxima alerta en ${minRestantes} min`);
     }
   }
 }
