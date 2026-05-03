@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitor Grid Bot — BTC · ETH · BNB</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+:root {
+  --bg:#080a0e;--bg2:#0f1218;--bg3:#161c26;
+  --border:#1e2535;--border2:#2a3347;
+  --text:#dce3f0;--muted:#5a6882;--dim:#3a4560;
+  --green:#00e5a0;--green2:#00b87a;
+  --yellow:#f5c542;--red:#ff4f6d;--blue:#4da6ff;
+  --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,160,0.012) 2px,rgba(0,229,160,0.012) 4px);pointer-events:none;z-index:0}
+
+.header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border);background:var(--bg2);position:relative;z-index:1}
+.header-left{display:flex;align-items:center;gap:14px}
+.logo{font-family:var(--mono);font-size:12px;color:var(--green);letter-spacing:2px}
+.logo-sep{color:var(--dim);margin:0 4px}
+.header-title{font-size:13px;font-weight:500;color:var(--text);letter-spacing:0.3px}
+.status-pill{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--muted);padding:4px 10px;border:1px solid var(--border2);border-radius:20px}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);transition:background 0.3s}
+.status-dot.live{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
+.tg-status{font-family:var(--mono);font-size:10px;padding:4px 10px;border:1px solid var(--border2);border-radius:20px;color:var(--muted)}
+.tg-status.connected{border-color:rgba(0,229,160,0.3);color:var(--green)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+.last-update{font-family:var(--mono);font-size:10px;color:var(--dim)}
+
+.main{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);position:relative;z-index:1}
+
+.panel{background:var(--bg2);padding:20px;position:relative;overflow:hidden;transition:background 0.3s}
+.panel::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--dim);opacity:0.4;transition:opacity 0.3s,background 0.3s}
+.panel.alert-green::after{background:var(--green);opacity:1}
+.panel.alert-yellow::after{background:var(--yellow);opacity:1}
+.panel.alert-red::after{background:var(--red);opacity:1}
+@keyframes flashGreen{0%{background:rgba(0,229,160,0.15)}100%{background:transparent}}
+@keyframes flashRed{0%{background:rgba(255,79,109,0.1)}100%{background:transparent}}
+.flash-up{animation:flashGreen 0.6s ease-out}
+.flash-down{animation:flashRed 0.6s ease-out}
+
+.panel-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+.asset-id{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--text);letter-spacing:-0.5px}
+.asset-pair{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px}
+.signal-badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1.5px;padding:4px 10px;border-radius:3px;text-transform:uppercase;transition:all 0.4s}
+.badge-wait{background:rgba(90,104,130,0.2);color:var(--muted);border:1px solid var(--border2)}
+.badge-ready{background:rgba(0,229,160,0.15);color:var(--green);border:1px solid rgba(0,229,160,0.3)}
+.badge-caution{background:rgba(245,197,66,0.12);color:var(--yellow);border:1px solid rgba(245,197,66,0.3)}
+.badge-stop{background:rgba(255,79,109,0.12);color:var(--red);border:1px solid rgba(255,79,109,0.3)}
+.badge-load{background:rgba(58,69,96,0.3);color:var(--dim);border:1px solid var(--border)}
+
+.price-block{margin-bottom:16px}
+.price-current{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--text);line-height:1;letter-spacing:-1px;transition:color 0.3s}
+.price-current.up{color:var(--green)}
+.price-current.down{color:var(--red)}
+.price-change{font-family:var(--mono);font-size:11px;margin-top:4px;transition:color 0.3s}
+.price-change.pos{color:var(--green2)}
+.price-change.neg{color:var(--red)}
+
+.range-section{margin-bottom:16px}
+.range-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--dim);margin-bottom:5px;letter-spacing:0.5px}
+.range-bar-wrap{position:relative;height:6px;background:var(--bg3);border-radius:3px;overflow:visible;margin-bottom:4px}
+.range-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,rgba(0,229,160,0.2),rgba(0,229,160,0.6));transition:width 0.6s ease}
+.range-bar-mid{position:absolute;top:-2px;width:1px;height:10px;background:var(--dim)}
+.range-bar-price{position:absolute;top:-3px;width:3px;height:12px;background:var(--green);border-radius:2px;box-shadow:0 0 6px var(--green);transition:left 0.6s ease}
+.range-pct{font-family:var(--mono);font-size:9px;color:var(--muted);text-align:right}
+
+.indicators{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:16px}
+.ind-item{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:8px 10px;transition:border-color 0.3s}
+.ind-item.ok{border-color:rgba(0,229,160,0.25)}
+.ind-item.warn{border-color:rgba(245,197,66,0.25)}
+.ind-item.bad{border-color:rgba(255,79,109,0.2)}
+.ind-name{font-family:var(--mono);font-size:8px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:3px}
+.ind-val{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);transition:color 0.3s}
+.ind-val.ok{color:var(--green)}
+.ind-val.warn{color:var(--yellow)}
+.ind-val.bad{color:var(--red)}
+.ind-sub{font-size:9px;color:var(--muted);margin-top:1px}
+
+.conditions{margin-bottom:14px}
+.cond-title{font-family:var(--mono);font-size:8px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px}
+.cond-item{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted)}
+.cond-item:last-child{border-bottom:none}
+.cond-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;transition:background 0.3s,box-shadow 0.3s}
+.cond-dot.ok{background:var(--green);box-shadow:0 0 4px var(--green2)}
+.cond-dot.warn{background:var(--yellow)}
+.cond-dot.bad{background:var(--red)}
+.cond-dot.loading{background:var(--dim)}
+.cond-text{flex:1}
+.cond-val{font-family:var(--mono);font-size:10px;color:var(--text)}
+
+.alert-box{border-radius:5px;padding:10px 12px;font-size:11px;line-height:1.5;transition:all 0.4s;min-height:46px;display:flex;align-items:center;gap:8px}
+.alert-box.ready{background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.25);color:var(--green)}
+.alert-box.caution{background:rgba(245,197,66,0.07);border:1px solid rgba(245,197,66,0.2);color:var(--yellow)}
+.alert-box.stop{background:rgba(255,79,109,0.07);border:1px solid rgba(255,79,109,0.2);color:var(--red)}
+.alert-box.wait{background:var(--bg3);border:1px solid var(--border);color:var(--dim)}
+.alert-icon{font-size:14px;flex-shrink:0}
+.tg-sent{font-family:var(--mono);font-size:9px;color:var(--green2);margin-top:4px;display:none}
+
+.bottom-bar{position:relative;z-index:1;background:var(--bg2);border-top:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.refresh-btn{font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:6px 14px;background:none;border:1px solid var(--border2);border-radius:4px;color:var(--muted);cursor:pointer;transition:all 0.2s}
+.refresh-btn:hover{border-color:var(--green);color:var(--green)}
+.refresh-btn:disabled{opacity:0.4;cursor:not-allowed}
+.auto-toggle{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer}
+.toggle-track{width:28px;height:16px;background:var(--border2);border-radius:8px;position:relative;transition:background 0.2s}
+.toggle-track.on{background:var(--green2)}
+.toggle-knob{position:absolute;top:2px;left:2px;width:12px;height:12px;background:var(--bg);border-radius:50%;transition:transform 0.2s}
+.toggle-track.on .toggle-knob{transform:translateX(12px)}
+.legend{display:flex;gap:16px;align-items:center}
+.leg-item{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:0.5px}
+.leg-dot{width:6px;height:6px;border-radius:50%}
+.countdown{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.error-notice{background:rgba(255,79,109,0.08);border:1px solid rgba(255,79,109,0.2);border-radius:5px;padding:8px 12px;font-size:11px;color:var(--red);margin-top:8px;display:none}
+
+/* TELEGRAM LOG */
+.tg-log{position:relative;z-index:1;background:var(--bg2);border-top:1px solid var(--border);padding:10px 24px;max-height:80px;overflow-y:auto}
+.tg-log-title{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:1px;margin-bottom:4px}
+.tg-log-item{font-family:var(--mono);font-size:10px;color:var(--muted);padding:2px 0;border-bottom:1px solid var(--border)}
+.tg-log-item.sent{color:var(--green2)}
+.tg-log-item.err{color:var(--red)}
+
+@media(max-width:700px){.main{grid-template-columns:1fr}.legend{display:none}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo">GRID<span class="logo-sep">/</span>MONITOR</div>
+    <div class="header-title">BTC · ETH · BNB — Alertas 4H + Telegram</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="tg-status connected" id="tg-status">📱 TELEGRAM ON</div>
+    <div class="status-pill">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">INICIANDO</span>
+    </div>
+    <div class="last-update" id="last-update">—</div>
+  </div>
+</div>
+
+<div class="main" id="main-grid">
+
+  <!-- BTC -->
+  <div class="panel" id="panel-BTC">
+    <div class="panel-header">
+      <div><div class="asset-id">BTC</div><div class="asset-pair">BTCUSDT · Binance Spot</div></div>
+      <div class="signal-badge badge-load" id="badge-BTC">CARGANDO</div>
+    </div>
+    <div class="price-block">
+      <div class="price-current" id="price-BTC">—</div>
+      <div class="price-change" id="change-BTC">—</div>
+    </div>
+    <div class="range-section">
+      <div class="range-labels"><span>$72,000</span><span>RANGO GRID</span><span>$80,000</span></div>
+      <div class="range-bar-wrap">
+        <div class="range-bar-fill" id="rangefill-BTC" style="width:0%"></div>
+        <div class="range-bar-mid" style="left:50%"></div>
+        <div class="range-bar-price" id="rangeprice-BTC" style="left:0%"></div>
+      </div>
+      <div class="range-pct" id="rangepct-BTC">—</div>
+    </div>
+    <div class="indicators">
+      <div class="ind-item" id="ind-rsi-BTC"><div class="ind-name">RSI · 14P</div><div class="ind-val" id="rsi-val-BTC">—</div><div class="ind-sub" id="rsi-sub-BTC">calculando</div></div>
+      <div class="ind-item" id="ind-bb-BTC"><div class="ind-name">BB · POSICIÓN</div><div class="ind-val" id="bb-val-BTC">—</div><div class="ind-sub" id="bb-sub-BTC">calculando</div></div>
+      <div class="ind-item" id="ind-ema-BTC"><div class="ind-name">EMA · 50</div><div class="ind-val" id="ema-val-BTC">—</div><div class="ind-sub" id="ema-sub-BTC">calculando</div></div>
+      <div class="ind-item" id="ind-bw-BTC"><div class="ind-name">BB · ANCHO</div><div class="ind-val" id="bw-val-BTC">—</div><div class="ind-sub" id="bw-sub-BTC">calculando</div></div>
+    </div>
+    <div class="conditions">
+      <div class="cond-title">// condiciones de entrada</div>
+      <div class="cond-item"><div class="cond-dot loading" id="c1-BTC"></div><span class="cond-text">RSI entre 40–60</span><span class="cond-val" id="cv1-BTC">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c2-BTC"></div><span class="cond-text">Precio zona media (30–70%)</span><span class="cond-val" id="cv2-BTC">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c3-BTC"></div><span class="cond-text">Precio cerca EMA 50 (±3%)</span><span class="cond-val" id="cv3-BTC">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c4-BTC"></div><span class="cond-text">BB angostas (ancho &lt;8%)</span><span class="cond-val" id="cv4-BTC">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c5-BTC"></div><span class="cond-text">Precio dentro del rango</span><span class="cond-val" id="cv5-BTC">—</span></div>
+    </div>
+    <div class="alert-box wait" id="alert-BTC"><span class="alert-icon">⏳</span><span class="alert-text">Cargando datos...</span></div>
+    <div class="error-notice" id="err-BTC"></div>
+  </div>
+
+  <!-- ETH -->
+  <div class="panel" id="panel-ETH">
+    <div class="panel-header">
+      <div><div class="asset-id">ETH</div><div class="asset-pair">ETHUSDT · Binance Spot</div></div>
+      <div class="signal-badge badge-load" id="badge-ETH">CARGANDO</div>
+    </div>
+    <div class="price-block">
+      <div class="price-current" id="price-ETH">—</div>
+      <div class="price-change" id="change-ETH">—</div>
+    </div>
+    <div class="range-section">
+      <div class="range-labels"><span>$2,000</span><span>RANGO GRID</span><span>$2,400</span></div>
+      <div class="range-bar-wrap">
+        <div class="range-bar-fill" id="rangefill-ETH" style="width:0%"></div>
+        <div class="range-bar-mid" style="left:50%"></div>
+        <div class="range-bar-price" id="rangeprice-ETH" style="left:0%"></div>
+      </div>
+      <div class="range-pct" id="rangepct-ETH">—</div>
+    </div>
+    <div class="indicators">
+      <div class="ind-item" id="ind-rsi-ETH"><div class="ind-name">RSI · 14P</div><div class="ind-val" id="rsi-val-ETH">—</div><div class="ind-sub" id="rsi-sub-ETH">calculando</div></div>
+      <div class="ind-item" id="ind-bb-ETH"><div class="ind-name">BB · POSICIÓN</div><div class="ind-val" id="bb-val-ETH">—</div><div class="ind-sub" id="bb-sub-ETH">calculando</div></div>
+      <div class="ind-item" id="ind-ema-ETH"><div class="ind-name">EMA · 50</div><div class="ind-val" id="ema-val-ETH">—</div><div class="ind-sub" id="ema-sub-ETH">calculando</div></div>
+      <div class="ind-item" id="ind-bw-ETH"><div class="ind-name">BB · ANCHO</div><div class="ind-val" id="bw-val-ETH">—</div><div class="ind-sub" id="bw-sub-ETH">calculando</div></div>
+    </div>
+    <div class="conditions">
+      <div class="cond-title">// condiciones de entrada</div>
+      <div class="cond-item"><div class="cond-dot loading" id="c1-ETH"></div><span class="cond-text">RSI entre 40–60</span><span class="cond-val" id="cv1-ETH">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c2-ETH"></div><span class="cond-text">Precio zona media (30–70%)</span><span class="cond-val" id="cv2-ETH">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c3-ETH"></div><span class="cond-text">Precio cerca EMA 50 (±3%)</span><span class="cond-val" id="cv3-ETH">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c4-ETH"></div><span class="cond-text">BB angostas (ancho &lt;8%)</span><span class="cond-val" id="cv4-ETH">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c5-ETH"></div><span class="cond-text">Precio dentro del rango</span><span class="cond-val" id="cv5-ETH">—</span></div>
+    </div>
+    <div class="alert-box wait" id="alert-ETH"><span class="alert-icon">⏳</span><span class="alert-text">Cargando datos...</span></div>
+    <div class="error-notice" id="err-ETH"></div>
+  </div>
+
+  <!-- BNB -->
+  <div class="panel" id="panel-BNB">
+    <div class="panel-header">
+      <div><div class="asset-id">BNB</div><div class="asset-pair">BNBUSDT · Binance Spot</div></div>
+      <div class="signal-badge badge-load" id="badge-BNB">CARGANDO</div>
+    </div>
+    <div class="price-block">
+      <div class="price-current" id="price-BNB">—</div>
+      <div class="price-change" id="change-BNB">—</div>
+    </div>
+    <div class="range-section">
+      <div class="range-labels"><span>$575</span><span>RANGO GRID</span><span>$665</span></div>
+      <div class="range-bar-wrap">
+        <div class="range-bar-fill" id="rangefill-BNB" style="width:0%"></div>
+        <div class="range-bar-mid" style="left:50%"></div>
+        <div class="range-bar-price" id="rangeprice-BNB" style="left:0%"></div>
+      </div>
+      <div class="range-pct" id="rangepct-BNB">—</div>
+    </div>
+    <div class="indicators">
+      <div class="ind-item" id="ind-rsi-BNB"><div class="ind-name">RSI · 14P</div><div class="ind-val" id="rsi-val-BNB">—</div><div class="ind-sub" id="rsi-sub-BNB">calculando</div></div>
+      <div class="ind-item" id="ind-bb-BNB"><div class="ind-name">BB · POSICIÓN</div><div class="ind-val" id="bb-val-BNB">—</div><div class="ind-sub" id="bb-sub-BNB">calculando</div></div>
+      <div class="ind-item" id="ind-ema-BNB"><div class="ind-name">EMA · 50</div><div class="ind-val" id="ema-val-BNB">—</div><div class="ind-sub" id="ema-sub-BNB">calculando</div></div>
+      <div class="ind-item" id="ind-bw-BNB"><div class="ind-name">BB · ANCHO</div><div class="ind-val" id="bw-val-BNB">—</div><div class="ind-sub" id="bw-sub-BNB">calculando</div></div>
+    </div>
+    <div class="conditions">
+      <div class="cond-title">// condiciones de entrada</div>
+      <div class="cond-item"><div class="cond-dot loading" id="c1-BNB"></div><span class="cond-text">RSI entre 40–60</span><span class="cond-val" id="cv1-BNB">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c2-BNB"></div><span class="cond-text">Precio zona media (30–70%)</span><span class="cond-val" id="cv2-BNB">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c3-BNB"></div><span class="cond-text">Precio cerca EMA 50 (±3%)</span><span class="cond-val" id="cv3-BNB">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c4-BNB"></div><span class="cond-text">BB angostas (ancho &lt;8%)</span><span class="cond-val" id="cv4-BNB">—</span></div>
+      <div class="cond-item"><div class="cond-dot loading" id="c5-BNB"></div><span class="cond-text">Precio dentro del rango</span><span class="cond-val" id="cv5-BNB">—</span></div>
+    </div>
+    <div class="alert-box wait" id="alert-BNB"><span class="alert-icon">⏳</span><span class="alert-text">Cargando datos...</span></div>
+    <div class="error-notice" id="err-BNB"></div>
+  </div>
+
+</div>
+
+<div class="tg-log" id="tg-log">
+  <div class="tg-log-title">// LOG TELEGRAM</div>
+  <div id="tg-log-items"><div class="tg-log-item">Esperando primera actualización...</div></div>
+</div>
+
+<div class="bottom-bar">
+  <div style="display:flex;align-items:center;gap:12px">
+    <button class="refresh-btn" id="refresh-btn" onclick="fetchAll()">↻ ACTUALIZAR</button>
+    <div class="auto-toggle" onclick="toggleAuto()">
+      <div class="toggle-track" id="auto-track"><div class="toggle-knob"></div></div>
+      <span id="auto-label">AUTO OFF</span>
+    </div>
+    <div class="countdown" id="countdown"></div>
+  </div>
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>ACTIVAR BOT</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--yellow)"></div>PRECAUCIÓN</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>NO OPERAR</div>
+  </div>
+  <div style="font-family:var(--mono);font-size:9px;color:var(--dim)">API Binance · 4H · RSI(14) · BB(20,2) · EMA(50)</div>
+</div>
+
+<script>
+const TG_TOKEN  = '8363672729:AAG6ERlN7qevBQuNK4I8J15ZJCYjVk2R5uo';
+const TG_CHATID = '5957950990';
+
+const ASSETS = {
+  BTC: { symbol:'BTCUSDT', low:72000,  high:80000,  decimals:0,
+         gridLow:72000, gridHigh:80000, grillas:10, capital:250, stopLoss:70000, takeProfit:81000 },
+  ETH: { symbol:'ETHUSDT', low:2000,   high:2400,   decimals:1,
+         gridLow:2000,  gridHigh:2400,  grillas:10, capital:250, stopLoss:1900,  takeProfit:2420  },
+  BNB: { symbol:'BNBUSDT', low:575,    high:665,    decimals:1,
+         gridLow:575,   gridHigh:665,   grillas:10, capital:300, stopLoss:562,   takeProfit:670   },
+};
+
+const prevPrices   = {BTC:null,ETH:null,BNB:null};
+const alertSent    = {BTC:false,ETH:false,BNB:false};
+const lastSignal   = {BTC:'',ETH:'',BNB:''};
+let autoRefresh    = false;
+let autoTimer      = null;
+let countdown      = 60;
+
+// ── MATH ──────────────────────────────────────────────────
+function calcEMA(closes,period){
+  const k=2/(period+1);
+  let ema=closes.slice(0,period).reduce((a,b)=>a+b,0)/period;
+  for(let i=period;i<closes.length;i++) ema=closes[i]*k+ema*(1-k);
+  return ema;
+}
+function calcRSI(closes,period=14){
+  let gains=0,losses=0;
+  for(let i=closes.length-period;i<closes.length;i++){
+    const d=closes[i]-closes[i-1];
+    if(d>0)gains+=d;else losses-=d;
+  }
+  const ag=gains/period,al=losses/period;
+  if(al===0)return 100;
+  return 100-(100/(1+ag/al));
+}
+function calcBB(closes,period=20,mult=2){
+  const sl=closes.slice(-period);
+  const mean=sl.reduce((a,b)=>a+b,0)/period;
+  const std=Math.sqrt(sl.reduce((a,b)=>a+(b-mean)**2,0)/period);
+  return{upper:mean+mult*std,lower:mean-mult*std,middle:mean};
+}
+function fmt(n,dec){
+  return n>=1000?'$'+n.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec}):'$'+n.toFixed(dec);
+}
+
+// ── TELEGRAM ──────────────────────────────────────────────
+async function sendTelegram(msg){
+  try{
+    const url=`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`;
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({chat_id:TG_CHATID,text:msg,parse_mode:'HTML'})
+    });
+    const data=await res.json();
+    if(data.ok){
+      logTG('✓ Mensaje enviado a Telegram','sent');
+      return true;
+    } else {
+      logTG('✗ Error Telegram: '+data.description,'err');
+      return false;
+    }
+  }catch(e){
+    logTG('✗ Error de conexión Telegram','err');
+    return false;
+  }
+}
+
+function buildTelegramMsg(key,d,okCount){
+  const cfg=ASSETS[key];
+  const spacingPct=((cfg.gridHigh-cfg.gridLow)/cfg.grillas/((cfg.gridHigh+cfg.gridLow)/2)*100).toFixed(2);
+  const capGrilla=(cfg.capital/cfg.grillas).toFixed(0);
+  const ganCiclo=(parseFloat(spacingPct)-0.2).toFixed(2);
+  const now=new Date().toLocaleString('es-CL',{timeZone:'America/Santiago'});
+
+  if(okCount===5){
+    return `🟢 <b>ACTIVAR BOT — ${key}/USDT</b>\n\n`+
+      `💰 Precio actual: ${fmt(d.price,cfg.decimals)}\n`+
+      `📊 RSI: ${d.rsi.toFixed(1)} ✓\n`+
+      `📉 BB posición: ${d.bbPos.toFixed(0)}% ✓\n`+
+      `📈 EMA 50: ${fmt(d.ema50,cfg.decimals)} (±${d.emaDiff.toFixed(1)}%) ✓\n`+
+      `📏 BB ancho: ${d.bbWidth.toFixed(1)}% ✓\n\n`+
+      `⚙️ <b>CONFIGURACIÓN BINANCE:</b>\n`+
+      `• Par: ${key}/USDT\n`+
+      `• Precio inferior: ${fmt(cfg.gridLow,cfg.decimals)}\n`+
+      `• Precio superior: ${fmt(cfg.gridHigh,cfg.decimals)}\n`+
+      `• Grillas: ${cfg.grillas} (aritmético)\n`+
+      `• Inversión: $${cfg.capital} USDT\n`+
+      `• Capital/grilla: $${capGrilla}\n`+
+      `• Ganancia/ciclo: +${ganCiclo}% neto\n`+
+      `• Stop loss: ${fmt(cfg.stopLoss,cfg.decimals)}\n`+
+      `• Take profit: ${fmt(cfg.takeProfit,cfg.decimals)}\n\n`+
+      `🕐 4H · Spot Grid Bot · ${now}`;
+  } else if(okCount>=3){
+    return `⚠️ <b>PRECAUCIÓN — ${key}/USDT</b>\n\n`+
+      `${okCount}/5 condiciones OK\n`+
+      `Precio: ${fmt(d.price,cfg.decimals)}\n`+
+      `RSI: ${d.rsi.toFixed(1)} | BB: ${d.bbPos.toFixed(0)}% | BW: ${d.bbWidth.toFixed(1)}%\n\n`+
+      `Mercado en transición. Monitorear antes de activar.\n`+
+      `🕐 ${now}`;
+  }
+  return null;
+}
+
+function logTG(msg,cls=''){
+  const container=document.getElementById('tg-log-items');
+  const item=document.createElement('div');
+  item.className='tg-log-item '+(cls||'');
+  const time=new Date().toLocaleTimeString('es-CL');
+  item.textContent=`[${time}] ${msg}`;
+  container.insertBefore(item,container.firstChild);
+  if(container.children.length>10) container.removeChild(container.lastChild);
+}
+
+// ── FETCH ONE ──────────────────────────────────────────────
+async function fetchAsset(key){
+  const cfg=ASSETS[key];
+  const res=await fetch(`https://api.binance.com/api/v3/klines?symbol=${cfg.symbol}&interval=4h&limit=100`);
+  if(!res.ok)throw new Error(`HTTP ${res.status}`);
+  const data=await res.json();
+  const closes=data.map(k=>parseFloat(k[4]));
+  const price=closes[closes.length-1];
+  const open=parseFloat(data[data.length-1][1]);
+  const pctChg=((price-open)/open)*100;
+  const rsi=calcRSI(closes);
+  const bb=calcBB(closes);
+  const ema50=calcEMA(closes,50);
+  const bbWidth=((bb.upper-bb.lower)/bb.middle)*100;
+  const bbPos=((price-bb.lower)/(bb.upper-bb.lower))*100;
+  const emaDiff=Math.abs((price-ema50)/ema50)*100;
+  const rangePct=Math.max(0,Math.min(100,((price-cfg.low)/(cfg.high-cfg.low))*100));
+  const inRange=price>=cfg.low&&price<=cfg.high;
+  return{price,pctChg,rsi,bb,ema50,bbWidth,bbPos,emaDiff,rangePct,inRange};
+}
+
+// ── UPDATE PANEL ───────────────────────────────────────────
+function updatePanel(key,d){
+  const cfg=ASSETS[key];
+  const priceEl=document.getElementById(`price-${key}`);
+  const prev=prevPrices[key];
+  priceEl.textContent=fmt(d.price,cfg.decimals);
+  if(prev!==null){
+    priceEl.className='price-current '+(d.price>prev?'up':d.price<prev?'down':'');
+    const panel=document.getElementById(`panel-${key}`);
+    panel.classList.remove('flash-up','flash-down');
+    void panel.offsetWidth;
+    if(d.price>prev)panel.classList.add('flash-up');
+    else if(d.price<prev)panel.classList.add('flash-down');
+  }
+  prevPrices[key]=d.price;
+
+  const chEl=document.getElementById(`change-${key}`);
+  chEl.textContent=(d.pctChg>=0?'+':'')+d.pctChg.toFixed(2)+'% (4H)';
+  chEl.className='price-change '+(d.pctChg>=0?'pos':'neg');
+
+  document.getElementById(`rangefill-${key}`).style.width=d.rangePct+'%';
+  document.getElementById(`rangeprice-${key}`).style.left=`calc(${d.rangePct}% - 1.5px)`;
+  document.getElementById(`rangepct-${key}`).textContent=d.rangePct.toFixed(0)+'% del rango · '+(d.inRange?'dentro ✓':'FUERA ✗');
+
+  const rsiOk=d.rsi>=40&&d.rsi<=60;
+  const rsiWrn=(d.rsi>=35&&d.rsi<40)||(d.rsi>60&&d.rsi<=65);
+  const rsiCls=rsiOk?'ok':rsiWrn?'warn':'bad';
+  document.getElementById(`rsi-val-${key}`).textContent=d.rsi.toFixed(1);
+  document.getElementById(`rsi-val-${key}`).className='ind-val '+rsiCls;
+  document.getElementById(`rsi-sub-${key}`).textContent=rsiOk?'neutral ✓':d.rsi<40?'sobrevendido':'sobrecomprado';
+  document.getElementById(`ind-rsi-${key}`).className='ind-item '+rsiCls;
+
+  const bbOk=d.bbPos>=35&&d.bbPos<=65;
+  const bbWrn=(d.bbPos>=20&&d.bbPos<35)||(d.bbPos>65&&d.bbPos<=80);
+  const bbCls=bbOk?'ok':bbWrn?'warn':'bad';
+  document.getElementById(`bb-val-${key}`).textContent=d.bbPos.toFixed(0)+'%';
+  document.getElementById(`bb-val-${key}`).className='ind-val '+bbCls;
+  document.getElementById(`bb-sub-${key}`).textContent=bbOk?'cerca media ✓':d.bbPos<35?'banda inferior':'banda superior';
+  document.getElementById(`ind-bb-${key}`).className='ind-item '+bbCls;
+
+  const emaOk=d.emaDiff<=3;
+  const emaWrn=d.emaDiff>3&&d.emaDiff<=6;
+  const emaCls=emaOk?'ok':emaWrn?'warn':'bad';
+  document.getElementById(`ema-val-${key}`).textContent=fmt(d.ema50,cfg.decimals);
+  document.getElementById(`ema-val-${key}`).className='ind-val '+emaCls;
+  document.getElementById(`ema-sub-${key}`).textContent=(d.emaDiff<=3?'±':'Δ')+d.emaDiff.toFixed(1)+'% del precio';
+  document.getElementById(`ind-ema-${key}`).className='ind-item '+emaCls;
+
+  const bwOk=d.bbWidth<8;
+  const bwWrn=d.bbWidth>=8&&d.bbWidth<12;
+  const bwCls=bwOk?'ok':bwWrn?'warn':'bad';
+  document.getElementById(`bw-val-${key}`).textContent=d.bbWidth.toFixed(1)+'%';
+  document.getElementById(`bw-val-${key}`).className='ind-val '+bwCls;
+  document.getElementById(`bw-sub-${key}`).textContent=bwOk?'angostas ✓':bwWrn?'medias':'muy anchas';
+  document.getElementById(`ind-bw-${key}`).className='ind-item '+bwCls;
+
+  const conds=[
+    {ok:d.rsi>=40&&d.rsi<=60,   warn:(d.rsi>=35&&d.rsi<40)||(d.rsi>60&&d.rsi<=65), val:d.rsi.toFixed(1)},
+    {ok:d.rangePct>=30&&d.rangePct<=70, warn:(d.rangePct>=20&&d.rangePct<30)||(d.rangePct>70&&d.rangePct<=80), val:d.rangePct.toFixed(0)+'%'},
+    {ok:d.emaDiff<=3, warn:d.emaDiff<=6, val:'±'+d.emaDiff.toFixed(1)+'%'},
+    {ok:d.bbWidth<8,  warn:d.bbWidth<12, val:d.bbWidth.toFixed(1)+'%'},
+    {ok:d.inRange,    warn:false,         val:d.inRange?'SÍ':'FUERA'},
+  ];
+
+  let okCount=0;
+  conds.forEach((c,i)=>{
+    const dotEl=document.getElementById(`c${i+1}-${key}`);
+    const valEl=document.getElementById(`cv${i+1}-${key}`);
+    const cls=c.ok?'ok':c.warn?'warn':'bad';
+    dotEl.className='cond-dot '+cls;
+    valEl.textContent=c.val;
+    valEl.style.color=c.ok?'var(--green)':c.warn?'var(--yellow)':'var(--red)';
+    if(c.ok)okCount++;
+  });
+
+  const panel=document.getElementById(`panel-${key}`);
+  const badge=document.getElementById(`badge-${key}`);
+  const alertEl=document.getElementById(`alert-${key}`);
+  panel.className='panel';
+
+  let newSignal='';
+
+  if(!d.inRange){
+    newSignal='stop';
+    badge.className='signal-badge badge-stop';
+    badge.textContent='FUERA RANGO';
+    panel.classList.add('alert-red');
+    alertEl.className='alert-box stop';
+    alertEl.innerHTML='<span class="alert-icon">🚫</span><span>Precio fuera del rango grid. No activar bot.</span>';
+  } else if(okCount===5){
+    newSignal='ready';
+    badge.className='signal-badge badge-ready';
+    badge.textContent='ACTIVAR BOT';
+    panel.classList.add('alert-green');
+    alertEl.className='alert-box ready';
+    alertEl.innerHTML='<span class="alert-icon">✅</span><span><strong>Todas las condiciones OK.</strong> Activar Spot Grid Bot en Binance.</span>';
+  } else if(okCount>=3){
+    newSignal='caution';
+    badge.className='signal-badge badge-caution';
+    badge.textContent=`PRECAUCIÓN ${okCount}/5`;
+    panel.classList.add('alert-yellow');
+    alertEl.className='alert-box caution';
+    alertEl.innerHTML=`<span class="alert-icon">⚠️</span><span>${okCount}/5 condiciones OK. Monitorear antes de activar.</span>`;
+  } else {
+    newSignal='wait';
+    badge.className='signal-badge badge-wait';
+    badge.textContent=`ESPERAR ${okCount}/5`;
+    alertEl.className='alert-box wait';
+    alertEl.innerHTML=`<span class="alert-icon">⏸</span><span>${okCount}/5 condiciones OK. No activar todavía.</span>`;
+  }
+
+  // Enviar Telegram solo cuando cambia la señal a ready o caution
+  const signalChanged = newSignal !== lastSignal[key];
+  lastSignal[key] = newSignal;
+
+  if(signalChanged && (newSignal==='ready' || newSignal==='caution')){
+    const msg=buildTelegramMsg(key,{...d,bbPos:d.bbPos},okCount);
+    if(msg){
+      sendTelegram(msg).then(ok=>{
+        if(ok) logTG(`📱 Alerta ${key} enviada (${newSignal})`,'sent');
+      });
+    }
+  }
+}
+
+// ── FETCH ALL ──────────────────────────────────────────────
+async function fetchAll(){
+  const btn=document.getElementById('refresh-btn');
+  btn.disabled=true;btn.textContent='↻ ACTUALIZANDO...';
+  document.getElementById('status-dot').className='status-dot';
+  document.getElementById('status-text').textContent='ACTUALIZANDO';
+  let anyError=false;
+  for(const key of Object.keys(ASSETS)){
+    try{
+      document.getElementById(`err-${key}`).style.display='none';
+      const d=await fetchAsset(key);
+      updatePanel(key,d);
+    }catch(e){
+      anyError=true;
+      const errEl=document.getElementById(`err-${key}`);
+      errEl.style.display='block';
+      errEl.textContent=`Error: ${e.message}`;
+      document.getElementById(`badge-${key}`).textContent='ERROR';
+    }
+  }
+  const now=new Date();
+  document.getElementById('last-update').textContent='Última: '+now.toLocaleTimeString('es-CL');
+  document.getElementById('status-dot').className='status-dot '+(anyError?'':'live');
+  document.getElementById('status-text').textContent=anyError?'ERROR':'EN VIVO';
+  btn.disabled=false;btn.textContent='↻ ACTUALIZAR';
+  if(autoRefresh)startCountdown();
+}
+
+function startCountdown(){
+  clearInterval(autoTimer);countdown=60;
+  document.getElementById('countdown').textContent=`próxima en ${countdown}s`;
+  autoTimer=setInterval(()=>{
+    countdown--;
+    if(countdown<=0){clearInterval(autoTimer);document.getElementById('countdown').textContent='';fetchAll();}
+    else document.getElementById('countdown').textContent=`próxima en ${countdown}s`;
+  },1000);
+}
+
+function toggleAuto(){
+  autoRefresh=!autoRefresh;
+  document.getElementById('auto-track').className='toggle-track '+(autoRefresh?'on':'');
+  document.getElementById('auto-label').textContent=autoRefresh?'AUTO ON':'AUTO OFF';
+  if(autoRefresh){
+    startCountdown();
+    // Mensaje de inicio
+    sendTelegram('🤖 <b>Monitor Grid Bot activado</b>\n\nVigilando BTC · ETH · BNB cada 60 segundos.\nTe avisaré cuando se cumplan las condiciones de entrada.\n\n✅ Stop loss BNB: $562\n✅ Take profit BNB: $670\n✅ Activador BNB: $612');
+  } else {
+    clearInterval(autoTimer);
+    document.getElementById('countdown').textContent='';
+  }
+}
+
+fetchAll();
+</script>
+</body>
+</html>
